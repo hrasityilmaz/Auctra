@@ -1,7 +1,15 @@
-# Auctra
 
 ![Auctra](./docs/auctra_banner.png)
 
+<h3 align="center">
+⚡ Append-only log + real-time state in a single engine
+</h3>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/status-experimental-orange" />
+  <img src="https://img.shields.io/badge/language-Zig-yellow" />
+  <img src="https://img.shields.io/badge/license-MIT-green" />
+</p>
 
 **Auctra is an append-only log + state engine.**
 
