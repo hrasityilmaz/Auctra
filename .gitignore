@@ -1,0 +1,10 @@
+.zig-cache/
+zig-out/
+*.o
+*.so
+*.a
+*.dll
+*.dylib
+*.exe
+bench.snapy
+
