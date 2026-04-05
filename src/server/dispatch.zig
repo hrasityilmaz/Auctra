@@ -33,12 +33,7 @@ pub fn handleFrame(
         .get => try handleGet(allocator, state, reader, writer, header),
         .append => try handleAppend(allocator, state, reader, writer, header),
         .read_from => try handleReadFrom(allocator, state, reader, writer, header),
-        else => {
-            if (header.frame_len > 0) {
-                try wire.discardExact(reader, header.frame_len);
-            }
-            try wire.writeErrorResponse(writer, header.request_id, opcode, .invalid_opcode);
-        },
+        .stats => try handleStats(state, writer, header),
     }
 }
 
@@ -230,5 +225,31 @@ fn handleReadFrom(
         header.request_id,
         .ok,
         encoded,
+    );
+}
+
+fn handleStats(
+    state: anytype,
+    writer: anytype,
+    header: wire.FrameHeader,
+) !void {
+    const shard_count = state.db.engine.getShardCount();
+
+    const resp = wire.StatsResponse{
+        .shard_count = @intCast(shard_count),
+        .uptime_seconds = 0,
+    };
+
+    var buf: [wire.StatsResponse.encoded_len]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+
+    try resp.encode(fbs.writer());
+
+    try wire.writeHeaderAndPayload(
+        writer,
+        .stats,
+        header.request_id,
+        .ok,
+        fbs.getWritten(),
     );
 }

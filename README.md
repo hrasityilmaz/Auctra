@@ -182,6 +182,18 @@ Run:
 
 ./auctra-core server
 
+## Go demo
+
+Run server:
+
+```bash
+./auctra-core server
+
+In another terminal:
+
+cd examples/go
+go run ./demo
+
 ### Supported operations
 
 ### Supported operations

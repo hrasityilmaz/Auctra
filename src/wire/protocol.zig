@@ -99,6 +99,22 @@ pub const PingResponse = struct {
     }
 };
 
+pub const StatsResponse = struct {
+    shard_count: u32,
+    uptime_seconds: u64,
+
+    pub const encoded_len: usize = 12;
+
+    pub fn encode(self: StatsResponse, writer: anytype) !void {
+        var buf: [encoded_len]u8 = undefined;
+
+        std.mem.writeInt(u32, buf[0..4], self.shard_count, .big);
+        std.mem.writeInt(u64, buf[4..12], self.uptime_seconds, .big);
+
+        try writer.writeAll(&buf);
+    }
+};
+
 pub const GetRequest = struct {
     key: []u8,
 

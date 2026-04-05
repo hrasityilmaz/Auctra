@@ -1,64 +1,71 @@
 package main
 
 import (
-    "fmt"
-    "log"
+	"fmt"
+	"log"
 
-    ce "commitengine_examples/commitengine"
+	"commitengine_examples/client"
 )
 
 func main() {
-    engine, err := ce.Open(4, 128)
+	c, err := client.Dial("127.0.0.1:7001")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer c.Close()
+
+	if err := c.Ping(); err != nil {
+		log.Fatal("ping:", err)
+	}
+	fmt.Println("PING ok")
+
+	if err := c.Append([]byte("user:1"), []byte("Alice"), 2); err != nil {
+		log.Fatal("append:", err)
+	}
+	fmt.Println("APPEND ok")
+
+	getRes, err := c.Get([]byte("user:1"))
+	if err != nil {
+		log.Fatal("get:", err)
+	}
+	fmt.Printf("GET found=%v value=%s\n", getRes.Found, string(getRes.Value))
+
+	for shard := 0; shard < 4; shard++ {
+		fmt.Println("---- shard", shard)
+
+		res, err := c.ReadFrom(client.Cursor{
+			ShardID:      uint16(shard),
+			WalSegmentID: 0,
+			WalOffset:    0,
+		}, 16)
+		if err != nil {
+			log.Fatal("read_from:", err)
+		}
+
+		fmt.Printf("next_cursor=(shard=%d seg=%d off=%d)\n",
+			res.NextCursor.ShardID,
+			res.NextCursor.WalSegmentID,
+			res.NextCursor.WalOffset,
+		)
+
+		fmt.Println("item_count:", len(res.Items))
+
+		for i, item := range res.Items {
+			fmt.Printf("item[%d] seq=%d key=%s value=%s\n",
+				i,
+				item.SeqNo,
+				string(item.Key),
+				string(item.Value),
+			)
+		}
+	}
+
+    shards, uptime, err := c.Stats()
     if err != nil {
-        log.Fatal(err)
+        log.Fatal("stats:", err)
     }
-    defer engine.Close()
 
-    key := []byte("user:go-demo")
-
-    fmt.Println("== create ==")
-    w1, _ := engine.Put(key, []byte("v1"), true)
-
-    fmt.Println("== update ==")
-    engine.Put(key, []byte("v2"), true)
-
-    fmt.Println("== delete ==")
-    engine.Delete(key, true)
-
-    fmt.Println("== replay ==")
-
-    cursor := w1.Start
-
-    for {
-        items, next, err := engine.ReadFrom(cursor, 2)
-        if err != nil {
-            log.Fatal(err)
-        }
-
-        if len(items) == 0 {
-            fmt.Println("END")
-            break
-        }
-
-        fmt.Printf("PAGE cursor=(%d,%d,%d)\n",
-            cursor.ShardID,
-            cursor.WALSegmentID,
-            cursor.WALOffset,
-        )
-
-        for _, item := range items {
-            fmt.Printf(
-                "  seq=%d cursor=(%d,%d,%d) key=%q tombstone=%v value=%q\n",
-                item.Seqno,
-                item.Cursor.ShardID,
-                item.Cursor.WALSegmentID,
-                item.Cursor.WALOffset,
-                item.Key,
-                item.Tombstone,
-                item.Value,
-            )
-        }
-
-        cursor = next
-    }
+    fmt.Println("STATS:")
+    fmt.Println("  shard_count:", shards)
+    fmt.Println("  uptime:", uptime)
 }
