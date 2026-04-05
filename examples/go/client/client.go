@@ -13,7 +13,22 @@ const (
 	OpcodeGet      = 0x0003
 	OpcodeReadFrom = 0x0004
 	OpcodeStats    = 0x0005
+	OpcodeReadFromAllMerged = 0x0006
 )
+
+type ShardCursor struct {
+	WalSegmentID uint32
+	WalOffset    uint64
+}
+
+type GlobalMergeCursor struct {
+	ShardCursors []ShardCursor
+}
+
+type ReadFromAllMergedResult struct {
+	NextCursor GlobalMergeCursor
+	Items      []ReadItem
+}
 
 type Client struct {
 	conn          net.Conn
@@ -77,6 +92,107 @@ func (c *Client) nextID() uint32 {
 	id := c.nextRequestID
 	c.nextRequestID++
 	return id
+}
+
+func (c *Client) ReadFromAllMerged(cursor GlobalMergeCursor, limit uint32) (ReadFromAllMergedResult, error) {
+	requestID := c.nextID()
+
+	shardCount := len(cursor.ShardCursors)
+	payload := make([]byte, 12+(shardCount*12))
+
+	binary.BigEndian.PutUint16(payload[0:2], uint16(shardCount))
+	binary.BigEndian.PutUint16(payload[2:4], 0)
+	binary.BigEndian.PutUint32(payload[4:8], limit)
+	binary.BigEndian.PutUint32(payload[8:12], 0)
+
+	off := 12
+	for _, sc := range cursor.ShardCursors {
+		binary.BigEndian.PutUint32(payload[off:off+4], sc.WalSegmentID)
+		binary.BigEndian.PutUint64(payload[off+4:off+12], sc.WalOffset)
+		off += 12
+	}
+
+	if err := c.writeHeader(OpcodeReadFromAllMerged, requestID, uint32(len(payload))); err != nil {
+		return ReadFromAllMergedResult{}, err
+	}
+
+	if _, err := c.conn.Write(payload); err != nil {
+		return ReadFromAllMergedResult{}, err
+	}
+
+	hdr, payloadResp, err := c.readResponse()
+	if err != nil {
+		return ReadFromAllMergedResult{}, err
+	}
+
+	if hdr.Status != 0 {
+		return ReadFromAllMergedResult{}, fmt.Errorf("read_from_all_merged failed: status=%d", hdr.Status)
+	}
+
+	if len(payloadResp) < 12 {
+		return ReadFromAllMergedResult{}, fmt.Errorf("merged response payload too short: got=%d", len(payloadResp))
+	}
+
+	respShardCount := binary.BigEndian.Uint16(payloadResp[0:2])
+	itemCount := binary.BigEndian.Uint32(payloadResp[4:8])
+
+	result := ReadFromAllMergedResult{
+		NextCursor: GlobalMergeCursor{
+			ShardCursors: make([]ShardCursor, int(respShardCount)),
+		},
+		Items: nil,
+	}
+
+	off = 12
+
+	for i := 0; i < int(respShardCount); i++ {
+		if len(payloadResp) < off+12 {
+			return ReadFromAllMergedResult{}, fmt.Errorf("merged cursor payload truncated")
+		}
+
+		result.NextCursor.ShardCursors[i] = ShardCursor{
+			WalSegmentID: binary.BigEndian.Uint32(payloadResp[off : off+4]),
+			WalOffset:    binary.BigEndian.Uint64(payloadResp[off+4 : off+12]),
+		}
+		off += 12
+	}
+
+	for i := 0; i < int(itemCount); i++ {
+		if len(payloadResp) < off+20 {
+			return ReadFromAllMergedResult{}, fmt.Errorf("merged item header truncated")
+		}
+
+		seqno := binary.BigEndian.Uint64(payloadResp[off : off+8])
+		durability := payloadResp[off+8]
+		recordType := payloadResp[off+9]
+		valueKind := payloadResp[off+10]
+		keyLen := binary.BigEndian.Uint16(payloadResp[off+12 : off+14])
+		valueLen := binary.BigEndian.Uint32(payloadResp[off+16 : off+20])
+		off += 20
+
+		if len(payloadResp) < off+int(keyLen)+int(valueLen) {
+			return ReadFromAllMergedResult{}, fmt.Errorf("merged item payload truncated")
+		}
+
+		key := make([]byte, keyLen)
+		copy(key, payloadResp[off:off+int(keyLen)])
+		off += int(keyLen)
+
+		value := make([]byte, valueLen)
+		copy(value, payloadResp[off:off+int(valueLen)])
+		off += int(valueLen)
+
+		result.Items = append(result.Items, ReadItem{
+			SeqNo:      seqno,
+			Durability: durability,
+			RecordType: recordType,
+			ValueKind:  valueKind,
+			Key:        key,
+			Value:      value,
+		})
+	}
+
+	return result, nil
 }
 
 func (c *Client) writeHeader(opcode uint16, requestID uint32, payloadLen uint32) error {

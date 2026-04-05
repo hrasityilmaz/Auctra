@@ -10,11 +10,75 @@ pub const Opcode = enum(u16) {
     get = 0x0003,
     read_from = 0x0004,
     stats = 0x0005,
+    read_from_all_merged = 0x0006,
 
     pub fn fromInt(v: u16) ?Opcode {
         return std.meta.intToEnum(Opcode, v) catch null;
     }
 };
+
+pub const ReadFromAllMergedRequest = struct {
+    limit: u32,
+    shard_cursors: []ShardCursorWire,
+
+    pub fn decode(
+        allocator: std.mem.Allocator,
+        payload: []const u8,
+    ) !ReadFromAllMergedRequest {
+        if (payload.len < 12) return error.BadRequest;
+
+        const shard_count = readIntAt(u16, payload, 0);
+        const limit = readIntAt(u32, payload, 4);
+
+        const expected_len: usize = 12 + (@as(usize, shard_count) * 12);
+        if (payload.len != expected_len) return error.BadRequest;
+
+        const cursors = try allocator.alloc(ShardCursorWire, shard_count);
+        errdefer allocator.free(cursors);
+
+        var off: usize = 12;
+        for (cursors) |*cursor| {
+            cursor.* = .{
+                .wal_segment_id = readIntAt(u32, payload, off),
+                .wal_offset = readIntAt(u64, payload, off + 4),
+            };
+            off += 12;
+        }
+
+        return .{
+            .limit = limit,
+            .shard_cursors = cursors,
+        };
+    }
+
+    pub fn deinit(self: ReadFromAllMergedRequest, allocator: std.mem.Allocator) void {
+        allocator.free(self.shard_cursors);
+    }
+};
+
+pub const ShardCursorWire = struct {
+    wal_segment_id: u32,
+    wal_offset: u64,
+};
+
+pub fn toEngineGlobalMergeCursor(
+    allocator: std.mem.Allocator,
+    cursors: []const ShardCursorWire,
+) !@import("../types.zig").GlobalMergeCursor {
+    const out = try allocator.alloc(@import("../types.zig").ShardCursor, cursors.len);
+    errdefer allocator.free(out);
+
+    for (cursors, 0..) |cursor, i| {
+        out[i] = .{
+            .wal_segment_id = cursor.wal_segment_id,
+            .wal_offset = cursor.wal_offset,
+        };
+    }
+
+    return .{
+        .shard_cursors = out,
+    };
+}
 
 pub const Status = enum(u16) {
     ok = 0,
@@ -112,6 +176,76 @@ pub const StatsResponse = struct {
         std.mem.writeInt(u64, buf[4..12], self.uptime_seconds, .big);
 
         try writer.writeAll(&buf);
+    }
+};
+
+pub const ReadFromAllMergedResponse = struct {
+    pub fn encode(
+        allocator: std.mem.Allocator,
+        result: @import("../types.zig").GlobalMergeReadFromResult,
+    ) ![]u8 {
+        const shard_count: usize = result.next_cursor.shard_cursors.len;
+
+        var total_len: usize = 12 + (shard_count * 12);
+
+        for (result.items) |item| {
+            const value_len: usize = switch (item.value) {
+                .@"inline" => |v| v.len,
+                .blob => |v| v.len,
+                .tombstone => 0,
+            };
+            total_len += 20 + item.key.len + value_len;
+        }
+
+        const out = try allocator.alloc(u8, total_len);
+        errdefer allocator.free(out);
+
+        writeIntAt(u16, out, 0, @intCast(shard_count));
+        writeIntAt(u16, out, 2, 0);
+        writeIntAt(u32, out, 4, @intCast(result.items.len));
+        writeIntAt(u32, out, 8, 0);
+
+        var off: usize = 12;
+
+        for (result.next_cursor.shard_cursors) |cursor| {
+            writeIntAt(u32, out, off, cursor.wal_segment_id);
+            writeIntAt(u64, out, off + 4, cursor.wal_offset);
+            off += 12;
+        }
+
+        for (result.items) |item| {
+            const value_kind: u8 = switch (item.value) {
+                .@"inline" => 0,
+                .blob => 1,
+                .tombstone => 2,
+            };
+
+            const value_bytes: []const u8 = switch (item.value) {
+                .@"inline" => |v| v,
+                .blob => |v| v,
+                .tombstone => "",
+            };
+
+            writeIntAt(u64, out, off, item.seqno);
+            writeByteAt(out, off + 8, @intFromEnum(item.durability));
+            writeByteAt(out, off + 9, @intFromEnum(item.record_type));
+            writeByteAt(out, off + 10, value_kind);
+            writeByteAt(out, off + 11, 0);
+            writeIntAt(u16, out, off + 12, @intCast(item.key.len));
+            writeIntAt(u16, out, off + 14, 0);
+            writeIntAt(u32, out, off + 16, @intCast(value_bytes.len));
+            off += 20;
+
+            @memcpy(out[off .. off + item.key.len], item.key);
+            off += item.key.len;
+
+            if (value_bytes.len > 0) {
+                @memcpy(out[off .. off + value_bytes.len], value_bytes);
+                off += value_bytes.len;
+            }
+        }
+
+        return out;
     }
 };
 
@@ -335,6 +469,12 @@ fn writeIntAt(comptime T: type, out: []u8, off: usize, value: T) void {
     var tmp: [@sizeOf(T)]u8 = undefined;
     std.mem.writeInt(T, &tmp, value, .big);
     @memcpy(out[off .. off + @sizeOf(T)], &tmp);
+}
+
+fn readIntAt(comptime T: type, buf: []const u8, off: usize) T {
+    var tmp: [@sizeOf(T)]u8 = undefined;
+    @memcpy(&tmp, buf[off .. off + @sizeOf(T)]);
+    return std.mem.readInt(T, &tmp, .big);
 }
 
 fn writeByteAt(out: []u8, off: usize, value: u8) void {

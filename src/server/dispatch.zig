@@ -34,6 +34,7 @@ pub fn handleFrame(
         .append => try handleAppend(allocator, state, reader, writer, header),
         .read_from => try handleReadFrom(allocator, state, reader, writer, header),
         .stats => try handleStats(state, writer, header),
+        .read_from_all_merged => try handleReadFromAllMerged(allocator, state, reader, writer, header),
     }
 }
 
@@ -251,5 +252,59 @@ fn handleStats(
         header.request_id,
         .ok,
         fbs.getWritten(),
+    );
+}
+
+fn handleReadFromAllMerged(
+    allocator: std.mem.Allocator,
+    state: anytype,
+    reader: anytype,
+    writer: anytype,
+    header: wire.FrameHeader,
+) !void {
+    const payload = try wire.readPayloadAlloc(
+        allocator,
+        reader,
+        header.frame_len,
+        wire.default_max_frame_size,
+    );
+    defer allocator.free(payload);
+
+    var req = wire.ReadFromAllMergedRequest.decode(allocator, payload) catch {
+        try wire.writeErrorResponse(writer, header.request_id, .read_from_all_merged, .bad_request);
+        return;
+    };
+    defer req.deinit(allocator);
+
+    if (req.limit == 0) {
+        try wire.writeErrorResponse(writer, header.request_id, .read_from_all_merged, .bad_request);
+        return;
+    }
+
+    const shard_count = state.db.engine.getShardCount();
+    if (req.shard_cursors.len != shard_count) {
+        try wire.writeErrorResponse(writer, header.request_id, .read_from_all_merged, .bad_request);
+        return;
+    }
+
+    const merge_cursor = try wire.toEngineGlobalMergeCursor(allocator, req.shard_cursors);
+    defer allocator.free(merge_cursor.shard_cursors);
+
+    const result = try state.db.engine.readFromAllMerged(
+        allocator,
+        merge_cursor,
+        req.limit,
+    );
+    defer engine_mod.Engine.freeGlobalMergeReadFromResult(allocator, result);
+
+    const encoded = try wire.ReadFromAllMergedResponse.encode(allocator, result);
+    defer allocator.free(encoded);
+
+    try wire.writeHeaderAndPayload(
+        writer,
+        .read_from_all_merged,
+        header.request_id,
+        .ok,
+        encoded,
     );
 }

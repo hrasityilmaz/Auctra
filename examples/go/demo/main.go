@@ -68,4 +68,26 @@ func main() {
     fmt.Println("STATS:")
     fmt.Println("  shard_count:", shards)
     fmt.Println("  uptime:", uptime)
+    
+    // ---------------
+    mergedCursor := client.GlobalMergeCursor{
+	ShardCursors: make([]client.ShardCursor, int(shards)),
+    }
+
+    mergedRes, err := c.ReadFromAllMerged(mergedCursor, 32)
+    if err != nil {
+        log.Fatal("read_from_all_merged:", err)
+    }
+
+    fmt.Println("MERGED READ_FROM_ALL:")
+    fmt.Println("  item_count:", len(mergedRes.Items))
+
+    for i, item := range mergedRes.Items {
+        fmt.Printf("  item[%d] seq=%d key=%s value=%s\n",
+            i,
+            item.SeqNo,
+            string(item.Key),
+            string(item.Value),
+        )
+    }
 }
