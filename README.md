@@ -184,10 +184,12 @@ Run:
 
 ### Supported operations
 
+### Supported operations
+
 - PING
 - APPEND
 - GET
-- READ_FROM
+- READ_FROM (cursor-based replay)
 
 ---
 
