@@ -3,6 +3,7 @@ const engine_mod = @import("engine.zig");
 const hybrid_api = @import("hybrid_api.zig");
 const hybrid_cli = @import("hybrid_cli.zig");
 const Engine = engine_mod.Engine;
+const server = @import("server/server.zig");
 
 fn printDurationNs(label: []const u8, ns: u64) void {
     const us = @divTrunc(ns, std.time.ns_per_us);
@@ -22,6 +23,11 @@ pub fn main() !void {
         hybrid_cli.printUsage();
         return;
     };
+
+    if (std.mem.eql(u8, cmd, "server")) {
+        try server.run(allocator, "127.0.0.1");
+        return;
+    }
 
     if (std.mem.eql(u8, cmd, "demo")) {
         try runDemo(allocator);

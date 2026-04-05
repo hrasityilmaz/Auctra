@@ -5,6 +5,7 @@ zig-out/
 *.a
 *.dll
 *.dylib
+*.log
 *.exe
 bench.snapy
 
