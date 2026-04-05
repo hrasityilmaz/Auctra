@@ -2,12 +2,29 @@
 
 ## Overview
 
-Auctra-Core is a single-node append-only engine that combines:
+Auctra is a **single-node append-only engine + network server** that combines:
 
-* log (history)
-* state (current values)
-* replay (stream processing)
-* snapshot / restore
+- log (history)
+- state (current values)
+- replay (stream processing)
+- snapshot / restore
+- binary TCP interface
+
+It exposes both **local embedded API** and **network protocol**.
+
+---
+
+## Core idea
+
+```
+append-only log + current state
+```
+
+Every write is:
+
+1. appended to WAL
+2. applied to state
+3. available for replay
 
 ---
 
@@ -17,13 +34,13 @@ All writes go to an append-only WAL.
 
 Each operation is:
 
-* PUT (key → value)
-* DELETE (tombstone)
+- PUT (key → value)
+- DELETE (tombstone)
 
 ### Value handling
 
-* small values → inline
-* large values → blob storage
+- small values → inline
+- large values → blob storage
 
 ---
 
@@ -31,59 +48,108 @@ Each operation is:
 
 Keys are routed deterministically:
 
-```text
+```
 key → hash → shard
 ```
 
-* no user-side shard selection
-* consistent routing
-* parallelizable storage
+- no user-side shard selection
+- consistent routing
+- parallelizable storage
+- per-shard ordering
 
 ---
 
 ## Visibility vs durability
 
-Auctra separates:
+Auctra separates write stages:
 
 | Stage  | Meaning          |
-| ------ | ---------------- |
+|--------|------------------|
 | Append | written to WAL   |
 | Commit | visible to reads |
 | Sync   | durable on disk  |
 
 This allows:
 
-* fast writes
-* controlled durability
-* predictable latency
+- fast writes
+- controlled durability
+- predictable latency
 
 ---
 
 ## Read paths
 
-### Point lookup
+### 1. Point lookup
 
 Returns current value:
 
-```text
+```
 get(key)
 ```
 
 ---
 
-### Replay
+### 2. Shard-local replay
 
-Reads historical events:
-
-```text
+```
 readFrom(cursor)
 ```
 
+- ordered per shard
+- cursor-based
+- efficient scanning
+
 ---
 
-### Merged replay
+### 3. Global merged replay
 
-Combines shard streams into a single ordered feed.
+```
+readFromAllMerged(cursor)
+```
+
+- merges all shards
+- globally ordered stream
+- single unified feed
+
+---
+
+## Commit tokens
+
+Each write produces a token:
+
+```
+commit_token = seqno
+```
+
+Used for:
+
+- ordering
+- replay position
+- streaming cursor
+
+---
+
+## Network layer (Server)
+
+Auctra exposes a binary TCP server:
+
+```
+[ FrameHeader | Payload ]
+```
+
+### Supported operations
+
+- PING
+- APPEND
+- GET
+- READ_FROM
+- READ_FROM_ALL_MERGED
+- STATS
+
+This allows Auctra to act as:
+
+- embedded engine
+- remote data service
 
 ---
 
@@ -91,9 +157,9 @@ Combines shard streams into a single ordered feed.
 
 Snapshots capture full state:
 
-* fast restore
-* avoids full replay
-* consistent state point
+- fast restore
+- avoids full replay
+- consistent point-in-time state
 
 ---
 
@@ -101,8 +167,8 @@ Snapshots capture full state:
 
 Track engine progress:
 
-* visibility frontier
-* durability frontier
+- visibility frontier
+- durability frontier
 
 ---
 
@@ -110,61 +176,47 @@ Track engine progress:
 
 Rewrites data to remove:
 
-* overwritten values
-* tombstones
-* stale records
+- overwritten values
+- tombstones
+- stale records
 
 Goals:
 
-* reduce disk
-* improve read speed
+- reduce disk usage
+- improve read performance
 
 ---
 
 ## Durability modes
 
-* ultrafast → append only
-* batch → grouped sync
-* strict → sync before return
-
----
-
-## Core concept
-
-```text
-log + state in one engine
-```
-
-Instead of:
-
-* Kafka (log)
-* * DB (state)
-
-Auctra provides both.
+- ultrafast → append only
+- batch → grouped sync
+- strict → fsync before return
 
 ---
 
 ## Design principles
 
-* append-only first
-* deterministic behavior
-* explicit durability control
-* minimal hidden work
-* predictable performance
+- append-only first
+- deterministic behavior
+- explicit durability control
+- minimal hidden work
+- predictable performance
 
 ---
 
 ## Summary
 
-Auctra is designed for:
+Auctra provides:
 
-* event sourcing
-* ledgers
-* audit logs
-* real-time state + history
+- one write path
+- one source of truth
+- state + history together
+- local + network access
 
-It provides:
+Designed for:
 
-* one write path
-* one source of truth
-* both state and history
+- event sourcing
+- ledgers
+- audit logs
+- replay pipelines

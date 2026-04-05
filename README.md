@@ -12,208 +12,252 @@
 
 ---
 
-## What is Auctra?
+# Auctra
 
 **Auctra is an append-only log + state engine.**
 
-It sits between log systems and databases, combining:
+It replaces the common stack of:
 
-- a write-ahead log (WAL)
-- a queryable key-value state
-- snapshots and checkpoints
-- deterministic replay
+- log systems (Kafka, etc.)
+- databases
+- caches
+- replay pipelines
 
-Instead of stitching together multiple systems, Auctra gives you:
+with a **single deterministic engine**.
 
-> **history + state in one engine**
+> One write path. One source of truth. Full history + real-time state.
 
 ---
 
-## The Problem
+## Why Auctra exists
 
-Modern systems almost always need both:
+Modern systems need:
 
 - full event history
 - fast current state
 
-But today you typically combine:
+Typical architecture:
 
-- Kafka / logs → for history
-- databases → for state
-- caches → for performance
-- pipelines → for replay
+- Kafka → history  
+- DB → current state  
+- cache → performance  
+- pipelines → replay  
 
-This creates:
+Problems:
 
-- complex architectures
-- multiple failure modes
-- duplicated data paths
-- hard-to-debug systems
+- complex infrastructure  
+- duplicated data paths  
+- consistency issues  
+- hard debugging  
 
 ---
 
-## The Auctra Approach
+## The Auctra model
 
-append-only log + current state
+Auctra simplifies everything:
 
-Every write is:
+**append-only log + current state**
 
-1. appended to a log  
-2. reflected in current state  
+Every write:
+
+1. appended to WAL  
+2. applied to state  
 3. available for replay  
 
-No dual systems. No sync problems. No divergence.
+No dual systems. No sync layers. No divergence.
 
 ---
 
-## What You Can Build
+## What makes Auctra different
 
-- event sourcing systems
-- financial ledgers
-- audit trails
-- real-time state + history pipelines
-- embedded stream processors
-- deterministic replay systems
+Auctra is not:
 
----
+- just a database  
+- just a log  
+- just a cache  
 
-## Core Concepts
+It is all three.
 
-### Single Write Path
+### Key properties
 
-All writes go through one path:
-
-write → WAL → state → replay
-
-This guarantees:
-
-- consistency
-- determinism
-- traceability
+- single write path  
+- deterministic replay  
+- instant state access  
+- full history retention  
+- crash-consistent durability modes  
 
 ---
 
-### Write Lifecycle
+## What you can build
 
-Auctra distinguishes three stages:
+- event sourcing systems  
+- financial ledgers  
+- audit trails  
+- streaming pipelines  
+- real-time materialized views  
+- deterministic backfills  
+- time-travel debugging  
+
+---
+
+## Core concepts
+
+### Single write path
+
+write → WAL → state → replay  
+
+Guarantees:
+
+- consistency  
+- traceability  
+- determinism  
+
+---
+
+### Write lifecycle
 
 1. append → written to WAL  
-2. commit → visible to reads  
+2. commit → visible  
 3. sync → durable  
 
 ---
 
-### Write States
-
-| State    | Meaning                                        |
-| -------- | ---------------------------------------------- |
-| Appended | The write was appended to the WAL              |
-| Visible  | The write is visible to reads                  |
-| Durable  | The write is expected to survive crash/restart |
-
----
-
-### Durability Modes
+### Durability modes
 
 | Mode      | Visibility   | Durability            |
-| --------- | ------------ | --------------------- |
-| ultrafast | after commit | later                 |
-| batch     | after commit | batched sync          |
-| strict    | after commit | ensured before return |
+|----------|-------------|-----------------------|
+| ultrafast | after commit | async                |
+| batch     | after commit | grouped fsync        |
+| strict    | after commit | fsync before return  |
 
 ---
 
-## High-Level API
-
-putWithDurability(...)
-putVisible(...)
-commit()
-sync()
-
----
-
-## Example
-
-./auctra-core put user:1 Alice
-./auctra-core get user:1
-
----
-
-## Benchmark
-
-Run:
-
-./zig-out/bin/bench
+## Performance
 
 ### Append throughput
 
-ultrafast: ~418k ops/sec  
-batch:     ~440k ops/sec  
-strict:    ~390k ops/sec  
+- ultrafast: ~418k ops/sec  
+- batch: ~440k ops/sec  
+- strict: ~390k ops/sec  
 
 ### Replay
 
-merged replay: ~244k items/sec  
+- merged replay: ~240k items/sec  
 
 ### Snapshot
 
-save (100k entries):    ~1.7 s  
-restore (100k entries): ~230 ms  
-
----
-
-### Notes
-
-- single-node measurements  
-- no networking or replication  
-- depends on hardware  
-
-Designed for:
-
-- high write throughput  
-- fast recovery  
-- efficient replay  
+- save (100k): ~1.7 s  
+- restore (100k): ~230 ms  
 
 ---
 
 ## 🧪 Auctra Server (Preview)
 
-Run:
+Auctra includes a **binary TCP server**.
 
+### Run server
+
+```
 ./auctra-core server
+```
 
-## Go demo
+Server runs on:
 
-Run server:
+```
+127.0.0.1:7001
+```
 
-```bash
+---
+
+## Protocol
+
+Binary framed protocol:
+
+```
+[ FrameHeader | Payload ]
+```
+
+### Operations
+
+- PING → health check  
+- APPEND → write  
+- GET → current state  
+- READ_FROM → shard replay  
+- READ_FROM_ALL_MERGED → global replay  
+- STATS → metrics  
+
+---
+
+## Example (Go)
+
+```
 ./auctra-core server
-
-In another terminal:
-
 cd examples/go
 go run ./demo
+```
 
-### Supported operations
+### Output
 
-### Supported operations
+```
+PING ok
 
-- PING
-- APPEND
-- GET
-- READ_FROM (cursor-based replay)
+APPEND ok
+commit_token: 10
+
+GET found=true value=Tengri
+```
+
+---
+
+## Key idea
+
+Auctra exposes:
+
+- current state → GET  
+- full history → READ  
+
+Nothing is lost. Everything is replayable.
+
+---
+
+## Commit tokens
+
+Each append returns:
+
+```
+commit_token = seqno
+```
+
+Used for:
+
+- ordering  
+- replay position  
+- streaming cursor  
+
+---
+
+## Stats example
+
+```
+shard_count: 4
+uptime: 18
+```
 
 ---
 
 ## Architecture
 
+See:
+
+```
 docs/architecture.md
+```
 
 ---
 
 ## Status
 
-Developer Preview
+**Developer Preview**
 
 ---
 
