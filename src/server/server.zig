@@ -3,17 +3,24 @@ const hybrid_api = @import("../hybrid_api.zig");
 const wire = @import("../wire/protocol.zig");
 const dispatch = @import("dispatch.zig");
 
-const ServerState = struct {
+pub const ServerState = struct {
     db: hybrid_api.HybridDb,
+    started_at_unix_s: u64,
 
     pub fn init(allocator: std.mem.Allocator) !ServerState {
         return .{
             .db = try hybrid_api.HybridDb.init(allocator, .{}),
+            .started_at_unix_s = @intCast(std.time.timestamp()),
         };
     }
 
     pub fn deinit(self: *ServerState) void {
         self.db.deinit();
+    }
+
+    pub fn uptimeSeconds(self: *const ServerState) u64 {
+        const now: u64 = @intCast(std.time.timestamp());
+        return now - self.started_at_unix_s;
     }
 };
 

@@ -1,7 +1,8 @@
 const std = @import("std");
 const hybrid_api = @import("../hybrid_api.zig");
-const wire = @import("../wire/protocol.zig");
 const engine_mod = @import("../engine.zig");
+const types = @import("../types.zig");
+const wire = @import("../wire/protocol.zig");
 
 pub fn handleFrame(
     allocator: std.mem.Allocator,
@@ -146,14 +147,13 @@ fn handleAppend(
     };
     defer req.deinit(allocator);
 
-    switch (req.durability) {
-        .ultrafast, .batch, .strict => {
-            // şimdilik wire seviyesinde parse ediyoruz
-            // core tarafına sonra durability mapleriz
-        },
-    }
+    const durability: types.Durability = switch (req.durability) {
+        .ultrafast => .ultrafast,
+        .batch => .batch,
+        .strict => .strict,
+    };
 
-    try state.db.put(req.key, req.value);
+    try state.db.putVisible(durability, req.key, req.value);
 
     const resp = wire.AppendResponse{
         .commit_token = 0,
@@ -238,7 +238,7 @@ fn handleStats(
 
     const resp = wire.StatsResponse{
         .shard_count = @intCast(shard_count),
-        .uptime_seconds = 0,
+        .uptime_seconds = state.uptimeSeconds(),
     };
 
     var buf: [wire.StatsResponse.encoded_len]u8 = undefined;
