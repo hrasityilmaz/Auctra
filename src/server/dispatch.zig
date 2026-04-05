@@ -153,10 +153,28 @@ fn handleAppend(
         .strict => .strict,
     };
 
-    try state.db.putVisible(durability, req.key, req.value);
+    const shard_id = state.db.engine.shardIdForKey(req.key);
+
+    const ops = [_]types.BatchOp{
+        .{
+            .put = .{
+                .key = req.key,
+                .value = req.value,
+            },
+        },
+    };
+
+    const result = try state.db.engine.appendBatchAndCommit(
+        shard_id,
+        &ops,
+        .{
+            .durability = durability,
+            .await_durable = (durability == .strict),
+        },
+    );
 
     const resp = wire.AppendResponse{
-        .commit_token = 0,
+        .commit_token = result.token.seqno,
     };
     const encoded = try resp.encode(allocator);
     defer allocator.free(encoded);

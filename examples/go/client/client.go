@@ -257,7 +257,7 @@ func (c *Client) Ping() error {
 	return nil
 }
 
-func (c *Client) Append(key, value []byte, durability uint8) error {
+func (c *Client) Append(key, value []byte, durability uint8) (uint64, error) {
 	requestID := c.nextID()
 
 	payload := make([]byte, 8+len(key)+len(value))
@@ -269,27 +269,28 @@ func (c *Client) Append(key, value []byte, durability uint8) error {
 	copy(payload[8+len(key):], value)
 
 	if err := c.writeHeader(OpcodeAppend, requestID, uint32(len(payload))); err != nil {
-		return err
+		return 0, err
 	}
 
 	if _, err := c.conn.Write(payload); err != nil {
-		return err
+		return 0, err
 	}
 
 	hdr, payloadResp, err := c.readResponse()
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	if hdr.Status != 0 {
-		return fmt.Errorf("append failed: status=%d", hdr.Status)
+		return 0, fmt.Errorf("append failed: status=%d", hdr.Status)
 	}
 
 	if len(payloadResp) != 8 {
-		return fmt.Errorf("append response payload size invalid: got=%d", len(payloadResp))
+		return 0, fmt.Errorf("append response payload size invalid: got=%d", len(payloadResp))
 	}
 
-	return nil
+	token := binary.BigEndian.Uint64(payloadResp[0:8])
+	return token, nil
 }
 
 func (c *Client) Get(key []byte) (GetResult, error) {

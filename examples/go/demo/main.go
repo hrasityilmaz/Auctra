@@ -19,10 +19,12 @@ func main() {
 	}
 	fmt.Println("PING ok")
 
-	if err := c.Append([]byte("user:1"), []byte("Alice"), 2); err != nil {
-		log.Fatal("append:", err)
-	}
-	fmt.Println("APPEND ok")
+	token, err := c.Append([]byte("user:1"), []byte("Tengri"), 2)
+    if err != nil {
+        log.Fatal("append:", err)
+    }
+    fmt.Println("APPEND ok")
+    fmt.Println("commit_token:", token)
 
 	getRes, err := c.Get([]byte("user:1"))
 	if err != nil {
