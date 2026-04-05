@@ -187,6 +187,7 @@ Run:
 - PING
 - APPEND
 - GET
+- READ_FROM
 
 ---
 
