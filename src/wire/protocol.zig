@@ -209,6 +209,103 @@ pub const AppendResponse = struct {
     }
 };
 
+pub const ReadFromRequest = struct {
+    cursor: CursorWire,
+    limit: u32,
+
+    pub fn decode(payload: []const u8) !ReadFromRequest {
+        if (payload.len != 24) return error.BadRequest;
+
+        return .{
+            .cursor = .{
+                .shard_id = std.mem.readInt(u16, payload[0..2], .big),
+                .wal_segment_id = std.mem.readInt(u32, payload[4..8], .big),
+                .wal_offset = std.mem.readInt(u64, payload[8..16], .big),
+            },
+            .limit = std.mem.readInt(u32, payload[16..20], .big),
+        };
+    }
+};
+
+pub const CursorWire = struct {
+    shard_id: u16,
+    wal_segment_id: u32,
+    wal_offset: u64,
+};
+
+pub fn toEngineCursor(cursor: CursorWire) @import("../types.zig").Cursor {
+    return .{
+        .shard_id = cursor.shard_id,
+        .wal_segment_id = cursor.wal_segment_id,
+        .wal_offset = cursor.wal_offset,
+    };
+}
+
+pub const ReadFromResponse = struct {
+    pub fn encode(
+        allocator: std.mem.Allocator,
+        result: @import("../types.zig").ReadFromResult,
+    ) ![]u8 {
+        var total_len: usize = 24;
+
+        for (result.items) |item| {
+            const value_len: usize = switch (item.value) {
+                .@"inline" => |v| v.len,
+                .blob => |v| v.len,
+                .tombstone => 0,
+            };
+
+            total_len += 20 + item.key.len + value_len;
+        }
+
+        const out = try allocator.alloc(u8, total_len);
+        errdefer allocator.free(out);
+
+        writeIntAt(u16, out, 0, result.next_cursor.shard_id);
+        writeIntAt(u16, out, 2, 0);
+        writeIntAt(u32, out, 4, result.next_cursor.wal_segment_id);
+        writeIntAt(u64, out, 8, result.next_cursor.wal_offset);
+        writeIntAt(u32, out, 16, @intCast(result.items.len));
+        writeIntAt(u32, out, 20, 0);
+
+        var off: usize = 24;
+
+        for (result.items) |item| {
+            const value_kind: u8 = switch (item.value) {
+                .@"inline" => 0,
+                .blob => 1,
+                .tombstone => 2,
+            };
+
+            const value_bytes: []const u8 = switch (item.value) {
+                .@"inline" => |v| v,
+                .blob => |v| v,
+                .tombstone => "",
+            };
+
+            writeIntAt(u64, out, off, item.seqno);
+            writeByteAt(out, off + 8, @intFromEnum(item.durability));
+            writeByteAt(out, off + 9, @intFromEnum(item.record_type));
+            writeByteAt(out, off + 10, value_kind);
+            writeByteAt(out, off + 11, 0);
+            writeIntAt(u16, out, off + 12, @intCast(item.key.len));
+            writeIntAt(u16, out, off + 14, 0);
+            writeIntAt(u32, out, off + 16, @intCast(value_bytes.len));
+            off += 20;
+
+            @memcpy(out[off .. off + item.key.len], item.key);
+            off += item.key.len;
+
+            if (value_bytes.len > 0) {
+                @memcpy(out[off .. off + value_bytes.len], value_bytes);
+                off += value_bytes.len;
+            }
+        }
+
+        return out;
+    }
+};
+
 pub fn readExact(reader: anytype, buf: []u8) !void {
     var off: usize = 0;
     while (off < buf.len) {
@@ -216,6 +313,16 @@ pub fn readExact(reader: anytype, buf: []u8) !void {
         if (n == 0) return error.EndOfStream;
         off += n;
     }
+}
+
+fn writeIntAt(comptime T: type, out: []u8, off: usize, value: T) void {
+    var tmp: [@sizeOf(T)]u8 = undefined;
+    std.mem.writeInt(T, &tmp, value, .big);
+    @memcpy(out[off .. off + @sizeOf(T)], &tmp);
+}
+
+fn writeByteAt(out: []u8, off: usize, value: u8) void {
+    out[off] = value;
 }
 
 pub fn writeAll(writer: anytype, buf: []const u8) !void {

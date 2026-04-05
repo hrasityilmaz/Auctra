@@ -41,4 +41,4 @@ def send_append(key: bytes, value: bytes, durability=0, request_id=100):
             commit_token = struct.unpack(">Q", payload)[0]
             print("  commit_token:", commit_token)
 
-send_append(b"user:1", b"Alice", durability=0, request_id=100)
+send_append(b"user:1", b"Tengri", durability=0, request_id=100)

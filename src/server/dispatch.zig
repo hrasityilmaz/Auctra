@@ -1,6 +1,7 @@
 const std = @import("std");
 const hybrid_api = @import("../hybrid_api.zig");
 const wire = @import("../wire/protocol.zig");
+const engine_mod = @import("../engine.zig");
 
 pub fn handleFrame(
     allocator: std.mem.Allocator,
@@ -31,6 +32,7 @@ pub fn handleFrame(
         .ping => try handlePing(reader, writer, header),
         .get => try handleGet(allocator, state, reader, writer, header),
         .append => try handleAppend(allocator, state, reader, writer, header),
+        .read_from => try handleReadFrom(allocator, state, reader, writer, header),
         else => {
             if (header.frame_len > 0) {
                 try wire.discardExact(reader, header.frame_len);
@@ -166,6 +168,65 @@ fn handleAppend(
     try wire.writeHeaderAndPayload(
         writer,
         .append,
+        header.request_id,
+        .ok,
+        encoded,
+    );
+}
+
+fn handleReadFrom(
+    allocator: std.mem.Allocator,
+    state: anytype,
+    reader: anytype,
+    writer: anytype,
+    header: wire.FrameHeader,
+) !void {
+    const payload = try wire.readPayloadAlloc(
+        allocator,
+        reader,
+        header.frame_len,
+        wire.default_max_frame_size,
+    );
+    defer allocator.free(payload);
+
+    const req = wire.ReadFromRequest.decode(payload) catch {
+        try wire.writeErrorResponse(writer, header.request_id, .read_from, .bad_request);
+        return;
+    };
+
+    if (req.limit == 0) {
+        try wire.writeErrorResponse(writer, header.request_id, .read_from, .bad_request);
+        return;
+    }
+
+    const shard_count = state.db.engine.getShardCount();
+    if (req.cursor.shard_id >= shard_count) {
+        try wire.writeErrorResponse(writer, header.request_id, .read_from, .invalid_cursor);
+        return;
+    }
+
+    const engine_cursor = wire.toEngineCursor(req.cursor);
+
+    const result = try state.db.engine.readFrom(
+        allocator,
+        engine_cursor,
+        req.limit,
+    );
+    defer {
+        if (result.arena) |arena| {
+            var owned_arena = arena;
+            owned_arena.deinit();
+        } else {
+            engine_mod.Engine.freeMergedItems(allocator, result.items);
+        }
+    }
+
+    const encoded = try wire.ReadFromResponse.encode(allocator, result);
+    defer allocator.free(encoded);
+
+    try wire.writeHeaderAndPayload(
+        writer,
+        .read_from,
         header.request_id,
         .ok,
         encoded,
