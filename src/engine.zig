@@ -1189,6 +1189,7 @@ pub const Engine = struct {
         if (checkpoint.version != 1) return error.InvalidCheckpointFile;
         if (checkpoint.shard_cursors.len != checkpoint.shard_count) return error.InvalidCheckpointFile;
         if (checkpointChecksum(checkpoint) != checksum) return error.CheckpointChecksumMismatch;
+
         return checkpoint;
     }
 

@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	ce "commitengine_examples/commitengine"
+	ce "auctra_examples/auctra"
 )
 
 const checkpointPath = "/tmp/orders-consumer.ckpt"

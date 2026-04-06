@@ -1,5 +1,5 @@
 import os
-from commit_engine import CommitEngine
+from auctra_core import CommitEngine
 
 CHECKPOINT_PATH = "/tmp/orders-consumer.ckpt"
 

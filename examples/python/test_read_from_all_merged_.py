@@ -1,4 +1,4 @@
-from commit_engine_tail_clean import CommitEngine, Cursor
+from auctra_core_tail_clean import CommitEngine, Cursor
 
 
 def zero_cursors(n: int):

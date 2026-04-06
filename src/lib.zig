@@ -42,5 +42,5 @@ test {
 pub const CheckpointKind = types.CheckpointKind;
 pub const EngineCheckpoint = types.EngineCheckpoint;
 
-pub const hybrid_api = @import("hybrid_api.zig");
-pub const hybrid_cli = @import("hybrid_cli.zig");
+pub const auctra_api = @import("auctra_api.zig");
+pub const auctra_cli = @import("auctra_cli.zig");

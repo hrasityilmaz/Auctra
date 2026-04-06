@@ -11,10 +11,10 @@ pub fn main() !void {
 
     const snapshot_path = "demo-snapshot.bin";
 
-    var db = try api.HybridDb.init(allocator, .{});
+    var db = try api.AuctraDb.init(allocator, .{});
     defer db.deinit();
 
-    std.debug.print("Hybrid Engine demo\n", .{});
+    std.debug.print("Auctra Core demo\n", .{});
     std.debug.print("==================\n\n", .{});
 
     std.debug.print("1) create user:1 => Alice\n", .{});

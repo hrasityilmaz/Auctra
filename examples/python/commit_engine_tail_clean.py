@@ -158,7 +158,7 @@ class CommitEngine:
         self._lock = threading.RLock()
         if lib_path is None:
             root = Path(__file__).resolve().parents[2]
-            lib_path = root / "zig-out" / "lib" / "libcommit_engine.so"
+            lib_path = root / "zig-out" / "lib" / "libauctra_core.so"
         self.lib = ctypes.CDLL(str(lib_path))
         self._bind()
         self.handle = self.lib.ce_engine_open(shard_count, inline_max)

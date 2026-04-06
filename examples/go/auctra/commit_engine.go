@@ -1,9 +1,9 @@
-package commitengine
+package auctra
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/../../../include
 #cgo LDFLAGS: -L${SRCDIR}/../../../zig-out/lib -lauctra_core
-#include <commit_engine.h>
+#include <auctra_core.h>
 #include <stdlib.h>
 */
 import "C"
@@ -11,6 +11,7 @@ import "C"
 import (
 	"errors"
 	"fmt"
+	"os"
 	"time"
 	"unsafe"
 )

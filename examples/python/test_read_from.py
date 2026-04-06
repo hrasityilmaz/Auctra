@@ -1,4 +1,4 @@
-from commit_engine import CommitEngine, Cursor
+from auctra_core import CommitEngine, Cursor
 
 
 def ctuple(c: Cursor) -> tuple[int, int, int]:

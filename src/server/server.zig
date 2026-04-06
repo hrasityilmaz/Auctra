@@ -4,12 +4,12 @@ const wire = @import("../wire/protocol.zig");
 const dispatch = @import("dispatch.zig");
 
 pub const ServerState = struct {
-    db: hybrid_api.HybridDb,
+    db: hybrid_api.AuctraDb,
     started_at_unix_s: u64,
 
     pub fn init(allocator: std.mem.Allocator) !ServerState {
         return .{
-            .db = try hybrid_api.HybridDb.init(allocator, .{}),
+            .db = try hybrid_api.AuctraDb.init(allocator, .{}),
             .started_at_unix_s = @intCast(std.time.timestamp()),
         };
     }

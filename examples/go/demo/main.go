@@ -4,97 +4,97 @@ import (
 	"fmt"
 	"log"
 
-	"commitengine_examples/client"
+	"auctra_examples/auctra"
 )
 
 func main() {
-	c, err := client.Dial("127.0.0.1:7001")
+	e, err := auctra.OpenDefault()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("open:", err)
 	}
-	defer c.Close()
+	defer e.Close()
 
-	if err := c.Ping(); err != nil {
-		log.Fatal("ping:", err)
-	}
-	fmt.Println("PING ok")
-
-	appendRes, err := c.Append([]byte("user:1"), []byte("Tengri"), 2)
+	appendRes, err := e.Put([]byte("user:1"), []byte("Tengri"), true)
 	if err != nil {
-		log.Fatal("append:", err)
+		log.Fatal("put:", err)
 	}
-	fmt.Println("APPEND ok")
-	fmt.Println("seqno:", appendRes.SeqNo)
+
+	fmt.Println("PUT ok")
 	fmt.Println("shard_id:", appendRes.ShardID)
-	fmt.Println("wal:", appendRes.WalSegmentID, appendRes.WalOffset)
-	fmt.Println("visible:", appendRes.VisibleSegmentID, appendRes.VisibleOffset)
-	fmt.Println("durable:", appendRes.DurableSegmentID, appendRes.DurableOffset)
+	fmt.Println("start:", appendRes.Start.WALSegmentID, appendRes.Start.WALOffset)
+	fmt.Println("end:", appendRes.End.WALSegmentID, appendRes.End.WALOffset)
+	fmt.Println("visible:", appendRes.Visible.WALSegmentID, appendRes.Visible.WALOffset)
+	if appendRes.HasDurable {
+		fmt.Println("durable:", appendRes.Durable.WALSegmentID, appendRes.Durable.WALOffset)
+	}
 	fmt.Println("record_count:", appendRes.RecordCount)
+	fmt.Println("first_seqno:", appendRes.FirstSeqno)
+	fmt.Println("last_seqno:", appendRes.LastSeqno)
 
-		getRes, err := c.Get([]byte("user:1"))
+	value, err := e.Get([]byte("user:1"))
 	if err != nil {
 		log.Fatal("get:", err)
 	}
-	fmt.Printf("GET found=%v value=%s\n", getRes.Found, string(getRes.Value))
+	fmt.Printf("GET value=%s\n", string(value))
 
 	for shard := 0; shard < 4; shard++ {
 		fmt.Println("---- shard", shard)
 
-		res, err := c.ReadFrom(client.Cursor{
+		items, next, err := e.ReadFrom(auctra.Cursor{
 			ShardID:      uint16(shard),
-			WalSegmentID: 0,
-			WalOffset:    0,
+			WALSegmentID: 0,
+			WALOffset:    0,
 		}, 16)
 		if err != nil {
 			log.Fatal("read_from:", err)
 		}
 
 		fmt.Printf("next_cursor=(shard=%d seg=%d off=%d)\n",
-			res.NextCursor.ShardID,
-			res.NextCursor.WalSegmentID,
-			res.NextCursor.WalOffset,
+			next.ShardID,
+			next.WALSegmentID,
+			next.WALOffset,
 		)
 
-		fmt.Println("item_count:", len(res.Items))
+		fmt.Println("item_count:", len(items))
 
-		for i, item := range res.Items {
-			fmt.Printf("item[%d] seq=%d key=%s value=%s\n",
+		for i, item := range items {
+			fmt.Printf("item[%d] seq=%d key=%s value=%s tombstone=%v\n",
 				i,
-				item.SeqNo,
+				item.Seqno,
 				string(item.Key),
 				string(item.Value),
+				item.Tombstone,
 			)
 		}
 	}
 
-    shards, uptime, err := c.Stats()
-    if err != nil {
-        log.Fatal("stats:", err)
-    }
+	start := []auctra.Cursor{
+		{ShardID: 0, WALSegmentID: 0, WALOffset: 0},
+		{ShardID: 1, WALSegmentID: 0, WALOffset: 0},
+		{ShardID: 2, WALSegmentID: 0, WALOffset: 0},
+		{ShardID: 3, WALSegmentID: 0, WALOffset: 0},
+	}
 
-    fmt.Println("STATS:")
-    fmt.Println("  shard_count:", shards)
-    fmt.Println("  uptime:", uptime)
-    
-    // ---------------
-    mergedCursor := client.GlobalMergeCursor{
-	ShardCursors: make([]client.ShardCursor, int(shards)),
-    }
+	mergedItems, nextCursors, err := e.ReadFromAllMerged(start, 32)
+	if err != nil {
+		log.Fatal("read_from_all_merged:", err)
+	}
 
-    mergedRes, err := c.ReadFromAllMerged(mergedCursor, 32)
-    if err != nil {
-        log.Fatal("read_from_all_merged:", err)
-    }
+	fmt.Println("MERGED READ_FROM_ALL:")
+	fmt.Println("  item_count:", len(mergedItems))
 
-    fmt.Println("MERGED READ_FROM_ALL:")
-    fmt.Println("  item_count:", len(mergedRes.Items))
+	for i, item := range mergedItems {
+		fmt.Printf("  item[%d] seq=%d key=%s value=%s\n",
+			i,
+			item.Seqno,
+			string(item.Key),
+			string(item.Value),
+		)
+	}
 
-    for i, item := range mergedRes.Items {
-        fmt.Printf("  item[%d] seq=%d key=%s value=%s\n",
-            i,
-            item.SeqNo,
-            string(item.Key),
-            string(item.Value),
-        )
-    }
+	fmt.Println("  next_cursors:")
+	for i, c := range nextCursors {
+		fmt.Printf("    [%d] shard=%d seg=%d off=%d\n",
+			i, c.ShardID, c.WALSegmentID, c.WALOffset)
+	}
 }

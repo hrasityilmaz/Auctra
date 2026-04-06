@@ -1,4 +1,4 @@
-from commit_engine import CommitEngine, Cursor
+from auctra_core import CommitEngine, Cursor
 
 
 def cur(c: Cursor) -> str:

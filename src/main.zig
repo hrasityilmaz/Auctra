@@ -1,7 +1,7 @@
 const std = @import("std");
 const engine_mod = @import("engine.zig");
-const hybrid_api = @import("hybrid_api.zig");
-const hybrid_cli = @import("hybrid_cli.zig");
+const auctra_api = @import("auctra_api.zig");
+const auctra_cli = @import("auctra_cli.zig");
 const Engine = engine_mod.Engine;
 const server = @import("server/server.zig");
 
@@ -20,7 +20,7 @@ pub fn main() !void {
     _ = args.next();
 
     const cmd = args.next() orelse {
-        hybrid_cli.printUsage();
+        auctra_cli.printUsage();
         return;
     };
 
@@ -34,10 +34,10 @@ pub fn main() !void {
         return;
     }
 
-    var db = try hybrid_api.HybridDb.init(allocator, .{});
+    var db = try auctra_api.AuctraDb.init(allocator, .{});
     defer db.deinit();
 
-    if (try hybrid_cli.handleTopLevel(&db, allocator, cmd, &args)) return;
+    if (try auctra_cli.handleTopLevel(&db, allocator, cmd, &args)) return;
 
     const engine = &db.engine;
 
@@ -55,17 +55,17 @@ pub fn main() !void {
         try handleSnapshot(&db, allocator, &args);
     } else {
         std.debug.print("unknown command: {s}\n", .{cmd});
-        hybrid_cli.printUsage();
+        auctra_cli.printUsage();
     }
 }
 
 fn runDemo(allocator: std.mem.Allocator) !void {
     const snapshot_path = "demo-snapshot.bin";
 
-    var db = try hybrid_api.HybridDb.init(allocator, .{});
+    var db = try auctra_api.AuctraDb.init(allocator, .{});
     defer db.deinit();
 
-    std.debug.print("Hybrid Engine demo\n", .{});
+    std.debug.print("Auctra demo\n", .{});
     std.debug.print("==================\n\n", .{});
     std.debug.print("This demo shows append, snapshot, restore, and rough operation timings.\n\n", .{});
 
@@ -156,7 +156,7 @@ fn runDemo(allocator: std.mem.Allocator) !void {
 }
 
 fn handleSnapshot(
-    db: *hybrid_api.HybridDb,
+    db: *auctra_api.AuctraDb,
     allocator: std.mem.Allocator,
     args: *std.process.ArgIterator,
 ) !void {
@@ -172,7 +172,7 @@ fn handleSnapshot(
             return;
         };
 
-        const kind = hybrid_cli.parseCheckpointKind(args.next());
+        const kind = auctra_cli.parseCheckpointKind(args.next());
         try db.snapshotWithKind(path, kind);
         std.debug.print("snapshot saved: {s} ({s})\n", .{ path, @tagName(kind) });
         return;
@@ -297,7 +297,7 @@ fn handleCheckpoint(
             return;
         };
 
-        const kind = hybrid_cli.parseCheckpointKind(args.next());
+        const kind = auctra_cli.parseCheckpointKind(args.next());
         try engine.writeCheckpointFile(allocator, path, kind);
         std.debug.print("checkpoint saved: {s} ({s})\n", .{ path, @tagName(kind) });
         return;
