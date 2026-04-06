@@ -19,14 +19,19 @@ func main() {
 	}
 	fmt.Println("PING ok")
 
-	token, err := c.Append([]byte("user:1"), []byte("Tengri"), 2)
-    if err != nil {
-        log.Fatal("append:", err)
-    }
-    fmt.Println("APPEND ok")
-    fmt.Println("commit_token:", token)
+	appendRes, err := c.Append([]byte("user:1"), []byte("Tengri"), 2)
+	if err != nil {
+		log.Fatal("append:", err)
+	}
+	fmt.Println("APPEND ok")
+	fmt.Println("seqno:", appendRes.SeqNo)
+	fmt.Println("shard_id:", appendRes.ShardID)
+	fmt.Println("wal:", appendRes.WalSegmentID, appendRes.WalOffset)
+	fmt.Println("visible:", appendRes.VisibleSegmentID, appendRes.VisibleOffset)
+	fmt.Println("durable:", appendRes.DurableSegmentID, appendRes.DurableOffset)
+	fmt.Println("record_count:", appendRes.RecordCount)
 
-	getRes, err := c.Get([]byte("user:1"))
+		getRes, err := c.Get([]byte("user:1"))
 	if err != nil {
 		log.Fatal("get:", err)
 	}

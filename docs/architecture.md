@@ -22,9 +22,36 @@ append-only log + current state
 
 Every write is:
 
-1. appended to WAL
-2. applied to state
-3. available for replay
+```
+client → WAL → state → replay
+```
+
+1. appended to WAL  
+2. applied to state  
+3. available for replay  
+
+---
+
+## Data flow diagram
+
+```
+           ┌──────────────┐
+           │   Client     │
+           └──────┬───────┘
+                  │ APPEND
+                  ▼
+           ┌──────────────┐
+           │     WAL      │
+           │ (append-only)│
+           └──────┬───────┘
+                  │
+        ┌─────────┴─────────┐
+        ▼                   ▼
+┌──────────────┐     ┌──────────────┐
+│    State     │     │   Replay     │
+│ (KV store)   │     │ (streaming)  │
+└──────────────┘     └──────────────┘
+```
 
 ---
 
@@ -59,21 +86,39 @@ key → hash → shard
 
 ---
 
-## Visibility vs durability
+## Commit lifecycle
 
-Auctra separates write stages:
+```
+append → commit → durable
+```
 
-| Stage  | Meaning          |
-|--------|------------------|
-| Append | written to WAL   |
-| Commit | visible to reads |
-| Sync   | durable on disk  |
+| Stage   | Meaning                |
+|---------|------------------------|
+| Append  | written to WAL         |
+| Commit  | visible to reads       |
+| Durable | fsync completed        |
+
+---
+
+## Commit window (concept)
+
+Each write produces a structured result:
+
+```
+CommitWindow {
+  seqno
+  shard_id
+  wal_position
+  visible_position
+  durable_position
+}
+```
 
 This allows:
 
-- fast writes
-- controlled durability
-- predictable latency
+- precise tracking
+- replay boundaries
+- deterministic recovery
 
 ---
 
@@ -81,11 +126,11 @@ This allows:
 
 ### 1. Point lookup
 
-Returns current value:
-
 ```
 get(key)
 ```
+
+Returns current value.
 
 ---
 
@@ -113,43 +158,47 @@ readFromAllMerged(cursor)
 
 ---
 
-## Commit tokens
-
-Each write produces a token:
+## Cursor model
 
 ```
-commit_token = seqno
+Cursor {
+  shard_id
+  wal_segment_id
+  wal_offset
+}
 ```
 
 Used for:
 
-- ordering
 - replay position
-- streaming cursor
+- streaming continuation
+- incremental reads
 
 ---
 
 ## Network layer (Server)
 
-Auctra exposes a binary TCP server:
+Binary protocol:
 
 ```
 [ FrameHeader | Payload ]
 ```
 
-### Supported operations
+### Protocol v2 (current)
 
-- PING
-- APPEND
-- GET
-- READ_FROM
-- READ_FROM_ALL_MERGED
-- STATS
+Append response:
 
-This allows Auctra to act as:
-
-- embedded engine
-- remote data service
+```
+seqno
+shard_id
+wal_segment_id
+wal_offset
+visible_segment_id
+visible_offset
+durable_segment_id
+durable_offset
+record_count
+```
 
 ---
 
@@ -189,9 +238,11 @@ Goals:
 
 ## Durability modes
 
-- ultrafast → append only
-- batch → grouped sync
-- strict → fsync before return
+| Mode      | Behavior               |
+|-----------|------------------------|
+| ultrafast | async write            |
+| batch     | grouped fsync          |
+| strict    | fsync before return    |
 
 ---
 

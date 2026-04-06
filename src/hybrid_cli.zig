@@ -5,19 +5,20 @@ const types = @import("types.zig");
 pub fn printUsage() void {
     std.debug.print(
         \\usage:
-        \\  hybrid-engine demo
-        \\  hybrid-engine put <key> <value> [ultrafast|batch|strict]
-        \\  hybrid-engine get <key>
-        \\  hybrid-engine delete <key> [ultrafast|batch|strict]
-        \\  hybrid-engine exists <key>
-        \\  hybrid-engine stats
-        \\  hybrid-engine frontier
-        \\  hybrid-engine inspect
-        \\  hybrid-engine checkpoint save <path> [visible|durable]
-        \\  hybrid-engine checkpoint inspect <path>
-        \\  hybrid-engine snapshot save <path> [visible|durable]
-        \\  hybrid-engine snapshot inspect <path>
-        \\  hybrid-engine snapshot restore <path>
+        \\  auctra-core server
+        \\  auctra-core demo
+        \\  auctra-core put <key> <value> [ultrafast|batch|strict]
+        \\  auctra-core get <key>
+        \\  auctra-core delete <key> [ultrafast|batch|strict]
+        \\  auctra-core exists <key>
+        \\  auctra-core stats
+        \\  auctra-core frontier
+        \\  auctra-core inspect
+        \\  auctra-core checkpoint save <path> [visible|durable]
+        \\  auctra-core checkpoint inspect <path>
+        \\  auctra-core snapshot save <path> [visible|durable]
+        \\  auctra-core snapshot inspect <path>
+        \\  auctra-core snapshot restore <path>
         \\
         \\demo:
         \\  Runs a built-in showcase that appends data, saves a snapshot,

@@ -1,7 +1,7 @@
 ![Auctra](./docs/auctra_banner.png)
 
 <h3 align="center">
-⚡ Append-only log + real-time state in a single engine
+⚡ Append-only log + real-time state + TCP server in a single engine
 </h3>
 
 <p align="center">
@@ -14,7 +14,7 @@
 
 # Auctra
 
-**Auctra is an append-only log + state engine.**
+**Auctra is an append-only log + state engine with snapshots, replay, and a binary TCP server.**
 
 It replaces the common stack of:
 
@@ -114,13 +114,13 @@ Guarantees:
 
 ---
 
-### Write lifecycle
+## Commit Semantics
 
-1. append → written to WAL  
-2. commit → visible  
-3. sync → durable  
+Writes follow a strict lifecycle:
 
----
+1. **append** → written to WAL  
+2. **commit** → visible  
+3. **sync** → durable  
 
 ### Durability modes
 
@@ -129,6 +129,33 @@ Guarantees:
 | ultrafast | after commit | async                |
 | batch     | after commit | grouped fsync        |
 | strict    | after commit | fsync before return  |
+
+### Commit window
+
+Each write returns a **commit window** describing the affected range:
+
+- start / end position  
+- sequence numbers  
+- visibility state  
+- durability state  
+
+---
+
+## When NOT to use Auctra
+
+Auctra is optimized for append-heavy, history-aware systems.
+
+Not ideal for:
+
+- simple CRUD apps with no history  
+- low-write, read-heavy dashboards  
+- systems that never need replay  
+
+Not (yet):
+
+- distributed multi-node consensus  
+- globally replicated databases  
+- drop-in OLTP replacement  
 
 ---
 
@@ -242,6 +269,16 @@ Used for:
 shard_count: 4
 uptime: 18
 ```
+
+---
+
+## Install
+
+Download latest release:
+
+https://github.com/hrasityilmaz/Auctra/releases
+
+> TCP server is available starting from v1.1.0
 
 ---
 

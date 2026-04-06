@@ -7,6 +7,8 @@ import (
 	"net"
 )
 
+const ProtocolVersion = 2
+
 const (
 	OpcodePing     = 0x0001
 	OpcodeAppend   = 0x0002
@@ -67,6 +69,18 @@ type ReadItem struct {
 type ReadFromResult struct {
 	NextCursor Cursor
 	Items      []ReadItem
+}
+
+type AppendResult struct {
+	SeqNo            uint64
+	ShardID          uint16
+	WalSegmentID     uint32
+	WalOffset        uint64
+	VisibleSegmentID uint32
+	VisibleOffset    uint64
+	DurableSegmentID uint32
+	DurableOffset    uint64
+	RecordCount      uint32
 }
 
 func Dial(addr string) (*Client, error) {
@@ -199,7 +213,7 @@ func (c *Client) writeHeader(opcode uint16, requestID uint32, payloadLen uint32)
 	buf := make([]byte, 16)
 
 	binary.BigEndian.PutUint32(buf[0:4], payloadLen)
-	binary.BigEndian.PutUint16(buf[4:6], 1)
+	binary.BigEndian.PutUint16(buf[4:6], ProtocolVersion)
 	binary.BigEndian.PutUint16(buf[6:8], opcode)
 	binary.BigEndian.PutUint32(buf[8:12], requestID)
 	binary.BigEndian.PutUint16(buf[12:14], 0)
@@ -257,7 +271,7 @@ func (c *Client) Ping() error {
 	return nil
 }
 
-func (c *Client) Append(key, value []byte, durability uint8) (uint64, error) {
+func (c *Client) Append(key, value []byte, durability uint8) (AppendResult, error) {
 	requestID := c.nextID()
 
 	payload := make([]byte, 8+len(key)+len(value))
@@ -269,28 +283,39 @@ func (c *Client) Append(key, value []byte, durability uint8) (uint64, error) {
 	copy(payload[8+len(key):], value)
 
 	if err := c.writeHeader(OpcodeAppend, requestID, uint32(len(payload))); err != nil {
-		return 0, err
+		return AppendResult{}, err
 	}
 
 	if _, err := c.conn.Write(payload); err != nil {
-		return 0, err
+		return AppendResult{}, err
 	}
 
 	hdr, payloadResp, err := c.readResponse()
 	if err != nil {
-		return 0, err
+		return AppendResult{}, err
 	}
 
 	if hdr.Status != 0 {
-		return 0, fmt.Errorf("append failed: status=%d", hdr.Status)
+		return AppendResult{}, fmt.Errorf("append failed: status=%d", hdr.Status)
 	}
 
-	if len(payloadResp) != 8 {
-		return 0, fmt.Errorf("append response payload size invalid: got=%d", len(payloadResp))
+	if len(payloadResp) != 52 {
+		return AppendResult{}, fmt.Errorf("append response payload size invalid: got=%d", len(payloadResp))
 	}
 
-	token := binary.BigEndian.Uint64(payloadResp[0:8])
-	return token, nil
+	result := AppendResult{
+		SeqNo:            binary.BigEndian.Uint64(payloadResp[0:8]),
+		ShardID:          binary.BigEndian.Uint16(payloadResp[8:10]),
+		WalSegmentID:     binary.BigEndian.Uint32(payloadResp[12:16]),
+		WalOffset:        binary.BigEndian.Uint64(payloadResp[16:24]),
+		VisibleSegmentID: binary.BigEndian.Uint32(payloadResp[24:28]),
+		VisibleOffset:    binary.BigEndian.Uint64(payloadResp[28:36]),
+		DurableSegmentID: binary.BigEndian.Uint32(payloadResp[36:40]),
+		DurableOffset:    binary.BigEndian.Uint64(payloadResp[40:48]),
+		RecordCount:      binary.BigEndian.Uint32(payloadResp[48:52]),
+	}
+
+	return result, nil
 }
 
 func (c *Client) Get(key []byte) (GetResult, error) {

@@ -17,7 +17,7 @@ func writeHeader(conn net.Conn, opcode uint16, requestID uint32, payloadLen uint
 	buf := make([]byte, 16)
 
 	binary.BigEndian.PutUint32(buf[0:4], payloadLen)
-	binary.BigEndian.PutUint16(buf[4:6], 1)
+	binary.BigEndian.PutUint16(buf[4:6], 2)
 	binary.BigEndian.PutUint16(buf[6:8], opcode)
 	binary.BigEndian.PutUint32(buf[8:12], requestID)
 	binary.BigEndian.PutUint16(buf[12:14], 0)

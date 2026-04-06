@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const protocol_version: u16 = 1;
+pub const protocol_version: u16 = 2;
 pub const header_len: usize = 16;
 pub const default_max_frame_size: u32 = 8 * 1024 * 1024; // 8 MiB
 
@@ -348,13 +348,39 @@ pub const AppendRequest = struct {
 };
 
 pub const AppendResponse = struct {
-    commit_token: u64,
+    seqno: u64,
+    shard_id: u16,
+    wal_segment_id: u32,
+    wal_offset: u64,
+
+    visible_segment_id: u32,
+    visible_offset: u64,
+
+    durable_segment_id: u32,
+    durable_offset: u64,
+
+    record_count: u32,
+
+    pub const encoded_len: usize = 52;
 
     pub fn encode(self: AppendResponse, allocator: std.mem.Allocator) ![]u8 {
-        const out = try allocator.alloc(u8, 8);
+        const out = try allocator.alloc(u8, encoded_len);
         errdefer allocator.free(out);
 
-        std.mem.writeInt(u64, out[0..8], self.commit_token, .big);
+        writeIntAt(u64, out, 0, self.seqno);
+        writeIntAt(u16, out, 8, self.shard_id);
+        writeIntAt(u16, out, 10, 0); // reserved
+        writeIntAt(u32, out, 12, self.wal_segment_id);
+        writeIntAt(u64, out, 16, self.wal_offset);
+
+        writeIntAt(u32, out, 24, self.visible_segment_id);
+        writeIntAt(u64, out, 28, self.visible_offset);
+
+        writeIntAt(u32, out, 36, self.durable_segment_id);
+        writeIntAt(u64, out, 40, self.durable_offset);
+
+        writeIntAt(u32, out, 48, self.record_count);
+
         return out;
     }
 };

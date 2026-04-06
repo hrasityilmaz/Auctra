@@ -50,7 +50,7 @@ fn handlePing(reader: anytype, writer: anytype, header: wire.FrameHeader) !void 
     var fbs = std.io.fixedBufferStream(&payload_buf);
 
     const resp = wire.PingResponse{
-        .major = 0,
+        .major = 1,
         .minor = 1,
         .patch = 0,
     };
@@ -173,8 +173,21 @@ fn handleAppend(
         },
     );
 
+    const durable_cursor = result.window.durable orelse result.window.visible;
+
     const resp = wire.AppendResponse{
-        .commit_token = result.token.seqno,
+        .seqno = result.token.seqno,
+        .shard_id = result.token.shard_id,
+        .wal_segment_id = result.token.wal_segment_id,
+        .wal_offset = result.token.wal_offset,
+
+        .visible_segment_id = result.window.visible.wal_segment_id,
+        .visible_offset = result.window.visible.wal_offset,
+
+        .durable_segment_id = durable_cursor.wal_segment_id,
+        .durable_offset = durable_cursor.wal_offset,
+
+        .record_count = @intCast(result.window.record_count),
     };
     const encoded = try resp.encode(allocator);
     defer allocator.free(encoded);
