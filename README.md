@@ -62,7 +62,7 @@ Append (Log) → Apply (State) → Replay (History)
 
 ## 📊 Performance Benchmarks
 
-*Tested on MacBook M2 Pro, 16GB RAM*
+*Benchmarks run on: Lenovo Z50 (Intel i7, 8GB RAM, Samsung 860 EVO SSD, Linux Mint, ext4, O_DIRECT WAL)*
 
 | Operation | Throughput        | Notes                         |
 |----------|------------------|-------------------------------|
