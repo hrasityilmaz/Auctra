@@ -14,18 +14,17 @@
 
 ---
 
-**Auctra is a log + state engine that replaces Kafka + DB + cache with a single system.**
+**Auctra is a log + state engine that replaces the traditional stack of log system + database + cache with a single system.**
 
 ---
 
 ## ⚡ Why not traditional architecture?
 
 In modern architectures, you often solve a single problem with multiple disjoint systems:
-
-- **Kafka** → event history  
-- **Database** → current state  
-- **Redis** → read performance  
-- **ETL Pipelines** → replay & recovery  
+- **log system** → event history  
+- **database** → current state  
+- **cache** → read performance  
+- **pipelines** → replay & recovery  
 
 This fragmentation leads to:
 
