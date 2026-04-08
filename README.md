@@ -1,3 +1,5 @@
+# Auctra
+
 ![Auctra](./docs/auctra_banner.png)
 
 <h3 align="center">
@@ -12,289 +14,113 @@
 
 ---
 
-# Auctra
-
-**Auctra is an append-only log + state engine with snapshots, replay, and a binary TCP server.**
-
-It replaces the common stack of:
-
-- log systems (Kafka, etc.)
-- databases
-- caches
-- replay pipelines
-
-with a **single deterministic engine**.
-
-> One write path. One source of truth. Full history + real-time state.
+**Auctra is a log + state engine that replaces Kafka + DB + cache with a single system.**
 
 ---
 
-## Why Auctra exists
+## ⚡ Why not traditional architecture?
 
-Modern systems need:
+In modern architectures, you often solve a single problem with multiple disjoint systems:
 
-- full event history
-- fast current state
+- **Kafka** → event history  
+- **Database** → current state  
+- **Redis** → read performance  
+- **ETL Pipelines** → replay & recovery  
 
-Typical architecture:
+This fragmentation leads to:
 
-- Kafka → history  
-- DB → current state  
-- cache → performance  
-- pipelines → replay  
+- dual writes  
+- consistency drift  
+- operational complexity  
 
-Problems:
-
-- complex infrastructure  
-- duplicated data paths  
-- consistency issues  
-- hard debugging  
-
----
-
-## The Auctra model
-
-Auctra simplifies everything:
-
-**append-only log + current state**
-
-Every write:
-
-1. appended to WAL  
-2. applied to state  
-3. available for replay  
-
-No dual systems. No sync layers. No divergence.
-
----
-
-## What makes Auctra different
-
-Auctra is not:
-
-- just a database  
-- just a log  
-- just a cache  
-
-It is all three.
-
-### Key properties
-
-- single write path  
-- deterministic replay  
-- instant state access  
-- full history retention  
-- crash-consistent durability modes  
-
----
-
-## What you can build
-
-- event sourcing systems  
-- financial ledgers  
-- audit trails  
-- streaming pipelines  
-- real-time materialized views  
-- deterministic backfills  
-- time-travel debugging  
-
----
-
-## Core concepts
-
-### Single write path
-
-write → WAL → state → replay  
-
-Guarantees:
-
-- consistency  
-- traceability  
-- determinism  
-
----
-
-## Commit Semantics
-
-Writes follow a strict lifecycle:
-
-1. **append** → written to WAL  
-2. **commit** → visible  
-3. **sync** → durable  
-
-### Durability modes
-
-| Mode      | Visibility   | Durability            |
-|----------|-------------|-----------------------|
-| ultrafast | after commit | async                |
-| batch     | after commit | grouped fsync        |
-| strict    | after commit | fsync before return  |
-
-### Commit window
-
-Each write returns a **commit window** describing the affected range:
-
-- start / end position  
-- sequence numbers  
-- visibility state  
-- durability state  
-
----
-
-## When NOT to use Auctra
-
-Auctra is optimized for append-heavy, history-aware systems.
-
-Not ideal for:
-
-- simple CRUD apps with no history  
-- low-write, read-heavy dashboards  
-- systems that never need replay  
-
-Not (yet):
-
-- distributed multi-node consensus  
-- globally replicated databases  
-- drop-in OLTP replacement  
-
----
-
-## Performance
-
-### Append throughput
-
-- ultrafast: ~418k ops/sec  
-- batch: ~440k ops/sec  
-- strict: ~390k ops/sec  
-
-### Replay
-
-- merged replay: ~240k items/sec  
-
-### Snapshot
-
-- save (100k): ~1.7 s  
-- restore (100k): ~230 ms  
-
----
-
-## 🧪 Auctra Server (Preview)
-
-Auctra includes a **binary TCP server**.
-
-### Run server
+**Auctra collapses this stack into a single atomic flow:**
 
 ```
+Append (Log) → Apply (State) → Replay (History)
+```
+
+---
+
+## 🚀 Key Features
+
+- **Deterministic Replay** → reconstruct state with full accuracy  
+- **Built in Zig** → zero-dependency, low-level performance  
+- **Binary TCP Protocol** → efficient, low-overhead communication  
+- **Snapshotting** → fast recovery without blocking  
+
+---
+
+## 🧠 What you can build
+
+- Event sourcing systems  
+- Financial ledgers  
+- Real-time analytics pipelines  
+- Audit logs  
+- Streaming backfills  
+- Time-travel debugging tools  
+
+---
+
+## 📊 Performance Benchmarks
+
+*Tested on MacBook M2 Pro, 16GB RAM*
+
+| Operation | Throughput        | Notes                         |
+|----------|------------------|-------------------------------|
+| Append   | ~418k ops/sec    | Sequential disk writes        |
+| Replay   | ~240k items/sec  | In-memory reconstruction      |
+| Restore  | ~230 ms          | 100k records (snapshot load)  |
+
+---
+
+## 🛠 Technical Overview
+
+### Durability Modes
+
+- **Ultrafast** → max throughput, async durability  
+- **Batch** → balanced fsync strategy  
+- **Strict** → fsync per write (max safety)  
+
+---
+
+### Feature Matrix
+
+| Feature                        | Core (OSS) | Pro |
+|--------------------------------|:----------:|:---:|
+| Single Write Path              |     ✅     | ✅  |
+| Deterministic Replay           |     ✅     | ✅  |
+| Snapshotting                   |     ✅     | ✅  |
+| Replication (Leader/Follower)  |     ❌     | ✅  |
+| Distributed Consensus (Raft)   |     ❌     | ✅  |
+
+---
+
+## 🧪 Quick Start
+
+### 1. Build
+Requires Zig 0.15+
+
+```bash
+zig build -Doptimize=ReleaseFast
+```
+
+### 2. Run server
+
+```bash
 ./auctra-core server
 ```
 
-Server runs on:
+### 3. Run client
 
-```
-127.0.0.1:7001
-```
-
----
-
-## Protocol
-
-Binary framed protocol:
-
-```
-[ FrameHeader | Payload ]
-```
-
-### Operations
-
-- PING → health check  
-- APPEND → write  
-- GET → current state  
-- READ_FROM → shard replay  
-- READ_FROM_ALL_MERGED → global replay  
-- STATS → metrics  
-
----
-
-## Example (Go)
-
-```
-./auctra-core server
-cd examples/go
-go run ./demo
-```
-
-### Output
-
-```
-PING ok
-
-APPEND ok
-commit_token: 10
-
-GET found=true value=Tengri
+```bash
+python3 examples/python/client_demo.py
 ```
 
 ---
 
-## Key idea
+## 🚧 Advanced Features
 
-Auctra exposes:
-
-- current state → GET  
-- full history → READ  
-
-Nothing is lost. Everything is replayable.
-
----
-
-## Commit tokens
-
-Each append returns:
-
-```
-commit_token = seqno
-```
-
-Used for:
-
-- ordering  
-- replay position  
-- streaming cursor  
-
----
-
-## Stats example
-
-```
-shard_count: 4
-uptime: 18
-```
-
----
-
-## Install
-
-Download latest release:
-
-https://github.com/hrasityilmaz/Auctra/releases
-
-> TCP server is available starting from v1.1.0
-
----
-
-## Architecture
-
-See:
-
-```
-docs/architecture.md
-```
-
----
-
-## Status
-
-**Developer Preview**
+Replication, clustering, and distributed capabilities are part of **Auctra Pro**.
 
 ---
 
